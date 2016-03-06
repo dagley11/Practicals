@@ -1,0 +1,174 @@
+\documentclass[12pt]{article}
+\usepackage[procnames]{listings}
+\usepackage{color}
+\setlength{\oddsidemargin}{-0.25 in}
+\setlength{\evensidemargin}{-0.25 in}
+\setlength{\topmargin}{-0.9 in}
+\setlength{\textwidth}{7.0 in}
+\setlength{\textheight}{9.0 in}
+\setlength{\headsep}{0.75 in}
+\setlength{\parindent}{0.3 in}
+\setlength{\parskip}{0.1 in}
+\usepackage{epsf}
+\usepackage{pseudocode}
+\usepackage{amsmath}
+%\usepackage{setspace}
+% \usepackage{times}
+% \usepackage{mathptm}
+\usepackage{listings}
+\usepackage{mathtools}
+\usepackage{indentfirst}
+\usepackage{paralist}
+\usepackage{hyperref} 
+\usepackage{float}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+\usepackage{csquotes}
+\usepackage{listings}
+\definecolor{keywords}{RGB}{255,0,90}
+\definecolor{comments}{RGB}{0,0,113}
+\definecolor{red}{RGB}{160,0,0}
+\definecolor{green}{RGB}{0,150,0}
+
+\lstset{language=Python, 
+	basicstyle=\ttfamily\small, 
+	keywordstyle=\color{keywords},
+	commentstyle=\color{comments},
+	stringstyle=\color{red},
+	showstringspaces=false,
+	identifierstyle=\color{green},
+	procnamekeys={def,class}}
+
+\newcommand\tab[1][0.5cm]{\hspace*{#1}}
+\def\O{\mathop{\smash{O}}\nolimits}
+\def\o{\mathop{\smash{o}}\nolimits}
+\newcommand{\e}{{\rm e}}
+\newcommand{\R}{{\bf R}}
+\newcommand{\Z}{{\bf Z}}
+
+\begin{document}
+\begin{align*}
+\mathrm{Practical \:2}
+\end{align*}
+$$
+\begin{array}{c  c  c}
+\mathrm{Alexander \: Dagley} & \mathrm{Di \: Wu} &\mathrm{Taosha \:Wang} \\
+\mathrm{alexander.s.dagley@gmail.com} & \mathrm{diw272@g.harvard.edu}&\mathrm{taw151@g.harvard.edu}\\
+\end{array}
+$$
+
+\begin{enumerate}
+\item
+Technical Method
+\item[(a)]
+Feature Engineering:\\
+
+\tab As our team is quickly coming to realize, feature engineering is key to achieving good modeling results.  This particular problem proved to be no exception.  We began by visually inspecting several of the XML files provided.  It became clear (also mentioned on the Kaggle site) that the files consisted of a series of system commands, some of which with key-value pairs that could be parsed further.  An example would be as follows: System Command:$load\_dll$ Key:$filename$  Value:\path{C:\WINDOWS\system32\gdi32.dll}.  We used the sample code provided featuring the python package $xml.etree.ElementTree$ to parse the XMLs.  This required editing the $call\_feats()$ function. We wrote a for loop to access each level of the XML tree in the following way: 
+
+\begin{lstlisting}
+for processes in tree.iter():
+	for process in processes:
+		for thread in process:
+			...
+\end{lstlisting}
+
+\tab We took a bag of words approach and parsed each document for words to add to our corpus.  Our first definition of a word was of the form $SystemCommand\_Key\_Value$ where I have defined key (filename) and value (a path in this example) above.  This alone produced well over 100k words across the training and test set. Through inspection we realized that the $dump\_line$ command called consecutively included values that could be concatenated to form a single word when the key was $ascii$, so we added logic to join these strings together. We chose to ignore the other attributes of $dump\_line$, namely $dump$, as these were linked to very long string of unique characters, which were unlikely to be matched in other documents.  For this reason, $filename_hash$ was ignored as well.  Additionally, we noticed that hex characters of the form $\&\#x<digit><digit>$ were found in a large number of documents and might be useful, so each word was parsed for these and the information extracted to form its own word.  Finally, we extracted the System Commands individually, so as to not throw away this information when their key,value pairs did not match those found across the corpus (with-in and across documents).
+
+\item[(b)]
+Preprocessing:\\
+\tab We hit a major stumbling block early on with respect to the features collected.  It was decided that tf-idf, $term frequency * inverse document frequency$ could be a profitable way of normalizing our features.  We transformed the entire dataset using this approach with the help of SciKit's $TfidfVectorizer$ function.  We ended up with a very good classification rate, near 90\%, on our cross-validation set-- yet, when submitting to Kaggle our error rate dropped to 25\%. We knew that it could be indicative of a bug in our code, or the case of mistakenly training on a cross-validation set.  But upon review of our pipeline, neither of these proved to be true.  A tip from Victor on Piazza revealed our mistake.  The features in the training and test set were decidedly different.  And our model was utilizing features unique to the training set to fit the model.  So, despite a successful cross-validation score, we were unable to capture variance in the Kaggle set.  To resolve, this we wrote additional python code to restrict our corpus to words that intersect the training and test sets.  It required scanning the training set and removing words not found in the test set and vice-versa. This was computationally costly (1 hr compute time) but was worthwhile.  Our Kaggle classification rate jumped from 25\% to 91\% as will be discussed more carefully in the following sections.  
+\\
+
+\item[(c)]
+Modeling:\\
+We tried a number of models (Random Forest Classifier, Naive Bayes, KNN) but had the most success with Gradient Boosting Trees.  We used xgBoost's implementation, which allows for multi-threaded computing and accepts sparse matrices as inputs.  Consequently, we were able to drastically reduce runtime.  For comparison, a run that could take an hour in SciKit learn's GBM can be performed in less than a minute with xgBoost! We found it useful to save our sparse matrices with Python's $pickle$ library to avoid having to rerun feature engineering steps upon a kernel failure in Jupyter Notebook.  
+
+*Please see the appendix below for details on our tuning parameters.  
+
+\item[(d)]
+Validation:\\
+We randomly partitioned our training set with an 80-20 split for cross-validation.  We achieved relatively robust scores and decided to save compute time by foregoing something more intensive like 5-fold cross-validation.  We used $\frac{\# of errors}{\# of samples}$ to measure error.  Interestingly, xgBoost allows for a test error to be measure at each boosting round.  This allowed us to examine the test/training error trade-off and is visualized in $Figure 1$.  We settling on 70 runs based on this plot to avoid over-fitting.
+
+$Figure 1$
+\includegraphics{Error.png}
+\newpage
+\item
+Results
+
+\item[(a)]
+\tab Susan tried K-nearest-neighbors method to classify all executive files into 15 types. With 16384 features at first I set k = 10 and got accuracy of 0.4544. She increased k to 500 and the accuracy slightly rises to 0.5161. She realized that there are too many features that do not distinguish different types and that more than half of the executive files are $None$ type. As a result, KNN method is very likely to label much more executive files as $None$ type.
+
+\item[(1)]
+\tab Our best accuracy is 0.81526, achieved using Xgboost method with 89623 features. Including more features such as using of Unicode hex characters to our Xgboost model did not help improve the accuracy. 
+
+\item[(2)]
+\tab KNN method could not compete with Xgboost in this classification issue. With the same features and different $k$s from 5 to 500, the best accuracy achieved was 0.5161.
+
+\item[(3)]
+\tab We also tried to select the most important features and ran Xgboost based on those features. However, the result does not beat (1). $Figure2$ gives us an intuitive explanation of how each feature contribute to the classification. The features are ranked by their gain to the object accuracy. As we can see from the plot, the gain decays dramatically, with only one feature gaining around 0.15, one feature gaining 0.1, and the rest less than 0.05. Most of the features contribute less than 0.01 to the accuracy. 
+
+\includegraphics{Rplot01.png}
+
+$Figure2$
+\newpage
+$\b{Class} \b{Performance}$
+
+\includegraphics{ClassPerf.png}
+
+$Figure3$
+
+\tab We can see that our model tended to perform well for classes with high support (number of observations).  This highlights the data sparsity problem in our training set.  Also notice our elevated performance.  It would be interested to know if our relative performance across classes is similar w.r.t. to the test set or if one or two particular classes are really hurting us.
+
+
+\item
+Discussion
+
+\item[(a)]
+Algorithms Used:\\
+\tab Throughout this project, we tried a few different algorithms to improve our predictions, such as Extreme Gradient Boosting and Kth Nearest Neighbourhood. 
+
+\item[(b)]
+Approaches tried:\\
+\tab Using derived 89K features, we were able to achieve a score of 0.81526 in the leader board. We were trying to improve our predictions by using several different approaches. 
+
+\item[(1)]
+Derive more features:\\
+\tab 
+Our initial set of features included 89k words.  We anticipated high ROI on mining additional features from the dataset. We attempted strategies such as splitting filepaths, extracting hex characters, signaling when hex characters appeared in filepaths (which by visual inspection seemed indicative of malware).  Unfortunately, this did not pan out.  Our initial set of features, gave us the highest score on the leader board of 0.81526.  In fact, as we will describe below.. no efforts proved successful in improving this score.  We will try to address at each step in this discussion why this is the case.  As for why adding features did not help there are a few possible explanations.  It could be the case that the newly derived features were behaving very similar to the existing ones, meaning they explained the same variance.  Or it is possible that they carried no meaningful information and were weak learners.  
+
+\item[(2)]
+Feature Reduction:\\ 
+\tab We explored two different methods for exploring feature reduction. To begin, we used a parameter in $TfidfVectorizer$  to limit the output to the top 2000 features based on tf-idf value (ranked high to low).  We ran our xGBC (xgBoost Gradient Boosting Classifier) model and did not see improvement on our cross-validation set.  Additionally, we explored variable importance.  Using the top 2000 variables as ranked by xgBoost's variable importance method, and ranked by gain, we filtered our dataset and ran the model again.  Yet again, there was no improvement on our cross-validation score.  We had some reason to not fully trust cross-validation, which was touched on above with respect to performing tf-idf on only features that intersected the train and test set.  The discrepancy in error likely implied that a significant portion of predictive information in the training set is not present in the Kaggle set.  And consequently, we received inflated scores on our cross-validation set. So, we made sure to make a Kaggle submission with the set of features reduced by variable importance and achieved a 79\% classification rate.  This was in line with our cross-validation result, showing this technique was not beneficial.
+
+\item[(3)]
+Normalization:\\
+We next considered the possibility that additional normalization might be helpful for our features.  We tried using the $norm='l2'$ parameter in $tfidfVectorizer$, which simply performs $\cos{(tfidf)}$.  We felt this might help bridge our information barrier between training and test sets.  Unfortunately, this did not prove to be helpful. Since tf-idf is already a form of normalization then this additional step was likely redundant.   
+
+\item[(4)]
+Optimization:\\
+\tab Our next hypothesis was that we were systematically over-fitting on the training set, despite seeing a decreasing test error rate.  Again, this could happen if the training and test set are different enough w.r.t to the information they carry.  And to correct for over-fitting, we explored adjusting parameters that would produce a more conservative model.  Specifically, we adjusted $subsample$, $max\_depth$, $colsample\_bytree$, $colsample\_bylevel$, $min\_child_weight$, $max\_delta\_step$, and $gamma$ (regularization term).  For example, colsample\_bytree uses a random sample of columns to build each true, which will slow down the learning process and potentially lead to a more robust model.  Unfortunately, this approach did not help either.  It gave a very similar score, so it was not necessarily a bad approach but likely did not affect the decision boundaries.
+
+\item[(5)]
+Leave-one-out cross validation:\\ 
+\tab To confront our situation of having a small training set with many classes, we tried leave-one-out cross validation. We constructed three sets of almost equal sized training data and built models from each set. We validated the model using a hold-out set. The accuracy from three data set were about 85\%, 88\% and 87\%. We then combined the prediction class from the early model and used the mode from four predictions to make our final classification. 
+
+\tab For the cases with no mode available but one class "8" prediction we classified it as class “8”, given this is the most frequent class. If four predictions had no mode and no class “8” we used the prediction from the earlier model as it is built with more data. We received a score of 0.79632 in the leader board using this method, which was not an improvement.  Having all information present in one model seems to be preferable, which means the model requires information that is lost when we used smaller partitions with this technique.
+
+\newpage
+Appendix
+\item[(1)]Link to our github:\\
+\url{https://github.com/dagley11/Practicals/tree/master/Practical_2/}
+\item[(2)]Software and tools team members used:\\
+Python, R, xgBoost, scikit-Learn
+\item[(3)]Model Parameters:\\
+Number of rounds: 70 \newline
+$eta$ (learning rate): .05 \newline
+All other parameters used default settings \newline
+\tab
+\end{enumerate}
+\end{document}
+
+
+
+
+
