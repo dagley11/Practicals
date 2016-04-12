@@ -1,0 +1,163 @@
+\documentclass[12pt]{article}
+\usepackage[procnames]{listings}
+\usepackage{color}
+\setlength{\oddsidemargin}{-0.25 in}
+\setlength{\evensidemargin}{-0.25 in}
+\setlength{\topmargin}{-0.9 in}
+\setlength{\textwidth}{7.0 in}
+\setlength{\textheight}{9.0 in}
+\setlength{\headsep}{0.75 in}
+\setlength{\parindent}{0.3 in}
+\setlength{\parskip}{0.1 in}
+\usepackage{epsf}
+\usepackage{pseudocode}
+\usepackage{amsmath}
+%\usepackage{setspace}
+% \usepackage{times}
+% \usepackage{mathptm}
+\usepackage{listings}
+\usepackage{mathtools}
+\usepackage{indentfirst}
+\usepackage{paralist}
+\usepackage{hyperref} 
+\usepackage{float}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+\usepackage{csquotes}
+\usepackage{listings}
+\definecolor{keywords}{RGB}{255,0,90}
+\definecolor{comments}{RGB}{0,0,113}
+\definecolor{red}{RGB}{160,0,0}
+\definecolor{green}{RGB}{0,150,0}
+
+\lstset{language=Python, 
+	basicstyle=\ttfamily\small, 
+	keywordstyle=\color{keywords},
+	commentstyle=\color{comments},
+	stringstyle=\color{red},
+	showstringspaces=false,
+	identifierstyle=\color{green},
+	procnamekeys={def,class}}
+
+\newcommand\tab[1][0.5cm]{\hspace*{#1}}
+\def\O{\mathop{\smash{O}}\nolimits}
+\def\o{\mathop{\smash{o}}\nolimits}
+\newcommand{\e}{{\rm e}}
+\newcommand{\R}{{\bf R}}
+\newcommand{\Z}{{\bf Z}}
+
+\begin{document}
+\begin{align*}
+\mathrm{Practical \:3}
+\end{align*}
+$$
+\begin{array}{c  c  c}
+\mathrm{Alexander \: Dagley} & \mathrm{Di \: Wu} \\
+\mathrm{alexander.s.dagley@gmail.com} & \mathrm{diw272@g.harvard.edu}\\
+\end{array}
+$$
+
+\begin{enumerate}
+\item
+Technical Method
+
+\tab For this practical, we have only been provided with a few features about the users and artists but with lots of pairs to predict. So what we did for such problem was first to perform a data exploratory analysis and then feature engineering. We joined the provided tables into one analytical data set then analyzed first the individual features, because we want to gain more insights on the data before we perform the clustering technique. 
+
+\item[(a)]
+Data Exploratory Analysis: 
+    \begin{itemize}
+        \item Users' gender: \\
+            \tab Among 4.1 million users and artists pairs, we found about $345K$ missing value in $sex$ variable. It's taking about 8 percent of the whole training set, therefore, we will treat the missing value as an individual category. We want to see how our targets $plays$ distributed against the $sex$ so we calculated a few statistics within each $sex$ category, for instance the quantiles of the number of $plays$, mean of the number of $plays$, median of the number $plays$ and standard deviation of the number of $plays$. We found that the number of $plays$ for female users tend to have a smaller mean/median and more stable compared to male users while the mean/median for $plays$ in unknown gender lays in the middle but unstable(with a bigger standard deviation). 
+        \item Users' age:\\
+            \tab We did the same for users' age. After plotting out the means and medians of plays in each age, we found not only for some ages the means and medians weren't stable but also number of pairs were small. For example, there are even users with age 1 or 2 or with age over 100. There were also 697 pairs with age equals to $-1337$ and there were $792K$ pairs with missing value in age. We suspend some of those are data errors and some of those meant to indicate as missing values. In either case, we treated them as the uncertain factor to our practice and we re-regroup these age. We left out the ages between 13 and 57 as it is below, within these ages, the mean and median is stable. \\
+            \begin{center} \includegraphics[scale=0.5]{age.PNG} \end{center}
+            \newpage
+        \item Users' Country and artists' name: \\
+            \tab We ranked the countries by counting the frequency pairs and found the top ones are United States, United Kingdom, Germany, Poland, Sweden etc but by ranking the mean of $plays$, there were lots of countries with smaller number of pairs were ranked on the top. We know now for some countries, the prediction is going to be difficult. As for artists' name, there were 2000 artist IDs but not all of them are associated with a valid name. Some names are just some strings. So we cleaned those by binning them together. 
+            \begin{center} \includegraphics[scale=0.6]{countries.PNG} \end{center}
+   \end{itemize}
+
+\item[(b)]
+Feature Engineering:
+
+\tab This practical proved particularly challenging to collect features!  We identified that we would get the biggest returns on engineering artist-level features. To do this we took advantage of the MusicBrainzID, which was provided. It was difficult to figure out how exactly to extract information from their database. Following instructions, I set up a VirtualBox (virtual machine) on my Windows System and downloaded an image of their server. This was supposed to give me command line access to their PostGres Databse.  But, I wasn't able to execute any PostGres commands once initialized and eventually moved on.
+
+\tab Fortunately, we realized that the website allowed http requests producing XML/JSON docs. Syntax: http://musicbrainz.org/ws/2/artist/?query=arid:6ee8668b-b4e1-48cf-ba25-a6f7c8bf864d
+
+\tab The MBID for this artist is 6ee8668b-b4e1-48cf-ba25-a6f7c8bf864d, and this is the part we need to adjust for all 2,000 artists.  We wrote a python script to grab JSONs. We hit a bit of a wall when we realized the site throttles the number of requests. But I was able to engineer a loop that slept for just over a second and reinitialized a connection every time we were booted to get these features.  
+
+\tab Upon snagging all 2,000 XMLs, we discovered 4 relevant features: type (e.g. person), gender, country (e.g. US), tags (e.g. Punk Rock).  Tags was a bit tricky, because many artists had multiple tags.  We took a bag of words approach w/ TfIDF normalization to parse this info. This gave us about 2,000 features. We viewed this as problematic for computational and model performance reasons (we didn't want to blow up our input space..). To further compress the tags categorical variable we performed K-Means with K = 8 on the TfIDF results. We conceptualized the result as a proxy for genre!  
+
+\tab The profile variables needed some data cleaning. We set all ages greater than 57 to 57 and all ages less than 13 to 13. We then opted to convert age to a categorical with the following segments [13, 18), [18,22), [22, 30), [30,40),[40,57).  This decision was made for computational reasons. As we will describe later, we used a K Modes algorithm designed for categorical features. The algorithm (K-prototypes), which accepted both categorical and numeric inputs was more costly so, we decided to avoid this! We thought our age segments were reasonable given prior beliefs about musical tastes and developmental stages.
+
+\item[(c)]
+Methods: \\
+\tab The library we used (https://github.com/nicodv/kmodes) included a predict function. We knew it would be too costly to run K Modes on our entire training set. So our idea was to run K Modes on a subset of the data set. And then predict the cluster assignment for the rest of the data set. This function is measuring their distance metric against each cluster centroid and picking the min, so you do not have to run the entire algorithm and use existing centroids!!  Our parameters were $n_{clusters}=30, init=Huang, n_{init}=5, verbose=1, max_{iter}=100$. Huang is a method they like for initializing clusters. (Huang, Z.: Clustering large data sets with mixed numeric and categorical values, Proceedings of the First Pacific Asia Knowledge Discovery and Data Mining Conference, Singapore, pp. 21-34, 1997.) $n_{init}$ is the number of times the algorithm will be run with differing initial conditions. The one with the lowest cost is selected. $max_{iter}$ is the maximum number of iterations the algorithm is allowed to run without converging on a solution. The default was 300, but we lowered this for run time considerations. We chose $K=30$ based on intuition. We felt something smaller like 10 would fail to capture the heterogeneity of musical tastes but a big K like 100 would start to form ill-informed clusters.  
+
+\tab There were two primary methods we considered for offering a prediction:
+
+\tab Method 1:
+Take the median 'plays' of each cluster from the training set and assign plays to the test set based on cluster assignment.
+
+\tab Method 2:
+Use cluster assignment as a feature on top of our other features with Extreme Gradient Boosting(xgboost).  
+
+\tab As an initial test, we sampled 10k from our data set to feed into the K Modes algorithm. With $K=30$, run time was 8 minutes. We took another 10k samples from the training set to compare Method 1 and Method 3. MAE for Method3 was 230 and for Method1 was 200.  But we weren't confident this would be robust given the size of our sample and the difference in methods. We felt Method 2 might see more improvement with the full data set, so we decided to test both methods on the full data set and use these as Kaggle submissions. It's interesting to note how difficult cross-validation is with this problem, given the size of the data set and the run time of the clustering algorithm.
+
+
+\newpage
+\item
+Discussion
+
+\item[(a)]
+Approaches tried:
+\begin{itemize}
+\item[(1)]
+Unsupervised Learning - K-means:\\
+\tab Initially, what we did was to assign a number for user's $sex, gender, country$ and artist's $name$. However, we realized this treatment for categorical variable was not appropriate since we used $K-means$ algorithm to compute the numerical distance within the data points. So we decide to transformed the features into dummies, which contains only 1s and 0s. Note that we also put in the derived features about artists, for example, the genre and countries. We expect these features to be informative and will boost the performance, however, it didn't provide us good results, we only got a score of 203.
+
+
+
+\item[(2)]
+Unsupervised Learning - K-modes:\\
+\tab K-Modes is considered a good alternative to K-Means when dealing with categorical data, and we expected improved performance. To allow for this method to be used, we converted the numerical feature, age, into a categorical feature. Additionally, we incorporated several of the features we engineered corresponding to artist, all of which were categorical.  For our initial run we opted for a K = 30.  We ran K-Modes on 50,000 observations from the training set and predicted the cluster assignments of the rest by using our Python package's predict() function.  We know that this function was simply measuring distance to each cluster center and picking the mind.  This saved us computational time, and we hoped would offer a robust result!  
+
+\tab For cross-validation we used 100,000 observations as our training and 100,00 for our test.  We took the cluster medians of the training set and measured MAE against the test set.  Our K-Modes algorithm scored 201.  This was disappointing, so we tried a K = 8, only to get a score of 204.  Looking at the leaderboard, it was clear there was something wrong with our method!  We attempted to correct for this by reducing our feature set by excluding all non-US countries.  We saw little improvement from this result with a score of 203.
+
+\item[(3)]
+Supervised Learning - Extreme Gradient Boosting:\\ 
+\tab We've had success in past competitions using the xgboost package for regression.  In some sense, we knew we were dealing with a regression problem that might benefit from clustering.  So, our idea was to first run K-Modes and to use the clusters formed as an additional feature in our dataset.  Then we'd run xgboost and round the result to the nearest integer.  Unfortunately, this result was disasterous with a score of 236.  We were careful to look at training and test error for each round to ensure the model was not overfitting, but this did not help our result.  
+
+\tab We remain curious about the notion of when it would and would not be beneficial to include a clustering result in a regression setting. This dataset may not have been a good setting for this technique.  
+
+ \item[(c)]
+ Conclusions: \\
+ We remain perplexed by this problem!! It was clear from the scores on the leaderboard that most teams were able to achieve a similar score.  We were near the back of the pack..  There must have been a straightforward method we did not try given this convergence!  Maybe it was matrix factorization as suggested in the practical pdf.  We may have had better success with a k protocols algorithm and keeping age as a continuous variable.  We knew we were throwing away information by transforming this to a categorical.  Maybe we needed to use more "business logic" to arrive at an answer.  It would have been a good idea to join the training and test set based on some criteria e.g. (artist, sex, country), performed a group by aggregation, and used a median function.
+
+\end{itemize}
+
+\item[(b)]
+Team challenge:
+\begin{itemize}
+\item[(1)] Time: \\
+\tab We spent lots of time on feature engineering and probably used it the wrong way by dummy them, which cost us lots of time on computation. We realized this challenge was probably specifically designed this way but at least we've tried some approach even it did not provide us the results we wanted. 
+\item[(2)] Time change: \\
+\tab One of our team member left our team a week ago. Although we were able to find another classmate joined our team, the new team member wasn't very responsive to our communication. She didn't participate our work but just one email back until one day before this practical due date. 
+
+\end{itemize}
+
+\newpage
+\item
+Appendix
+\item[(1)]Link to our github:\\
+\url{https://github.com/dagley11/Practicals/tree/master/Practical_2/}
+\item[(2)]Software and tools team members used:\\
+Python, R, xgBoost, scikit-Learn
+
+\end{enumerate}
+\end{document}
+
+
+
+
+
