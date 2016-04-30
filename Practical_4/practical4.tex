@@ -1,0 +1,176 @@
+\documentclass[12pt]{article}
+\usepackage[procnames]{listings}
+\usepackage{color}
+\setlength{\oddsidemargin}{-0.25 in}
+\setlength{\evensidemargin}{-0.25 in}
+\setlength{\topmargin}{-0.9 in}
+\setlength{\textwidth}{7.0 in}
+\setlength{\textheight}{9.0 in}
+\setlength{\headsep}{0.75 in}
+\setlength{\parindent}{0.3 in}
+\setlength{\parskip}{0.1 in}
+\usepackage{epsf}
+\usepackage{pseudocode}
+\usepackage{amsmath}
+%\usepackage{setspace}
+% \usepackage{times}
+% \usepackage{mathptm}
+\usepackage{listings}
+\usepackage{mathtools}
+\usepackage{indentfirst}
+\usepackage{paralist}
+\usepackage{hyperref} 
+\usepackage{float}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+\usepackage{csquotes}
+\usepackage{listings}
+\definecolor{keywords}{RGB}{255,0,90}
+\definecolor{comments}{RGB}{0,0,113}
+\definecolor{red}{RGB}{160,0,0}
+\definecolor{green}{RGB}{0,150,0}
+
+\lstset{language=Python, 
+	basicstyle=\ttfamily\small, 
+	keywordstyle=\color{keywords},
+	commentstyle=\color{comments},
+	stringstyle=\color{red},
+	showstringspaces=false,
+	identifierstyle=\color{green},
+	procnamekeys={def,class}}
+
+\newcommand\tab[1][0.5cm]{\hspace*{#1}}
+\def\O{\mathop{\smash{O}}\nolimits}
+\def\o{\mathop{\smash{o}}\nolimits}
+\newcommand{\e}{{\rm e}}
+\newcommand{\R}{{\bf R}}
+\newcommand{\Z}{{\bf Z}}
+
+\begin{document}
+\begin{align*}
+\mathrm{Practical \:4}
+\end{align*}
+$$
+\begin{array}{c  c  c}
+\mathrm{Alexander \: Dagley} & \mathrm{Di \: Wu} \\
+\mathrm{alexander.s.dagley@gmail.com} & \mathrm{diw272@g.harvard.edu}\\
+\end{array}
+$$
+
+\begin{enumerate}
+\item
+Debugging
+
+\tab I set up pygame for 64-bit Windows and Python 3 by following the instructions in the link provided.  This required downloading a pre-compiled wheel file.  Running this out of the box, I realized there were a number of bugs. 
+	\begin{itemize}
+		\item print statements: \\
+			\tab Due to my set up w/ Python 3, I needed to adjust all print statements, since print is a function in Python 3.  This just required adding parentheses.
+		\item collision detection: \\
+			\tab This bug was documented on Piazza.  Basically, the boxes for sensing sprite collision are off.  This means that when you do a manual run of the game, the monkey dies without hitting a tree you can see.  But the console will tell you that the monkey hit a tree.  I attempted to fix this bug but was worried about down-stream effects, since the offsets for object locations were hard-coded.  I also realized that the offset would not impact reinforcement learning, so we decided to leave this bug alone.
+		\item tabbing: \\
+			\tab Both files we were given SwingMonkey.py and stub.py had issues with either code being out of alignment with its block or spaces being substituted for tabs, which need to be consistent in python.  I was able to fix this with a simple find and replace.
+		\item next tree does not exist: \\
+			\tab This bug was also documented on Piazza, but a fix was not outlined.  I was unable to ascertain the exact cause of this bug but was able to provide a fix.  I instantiate $next_tree$ as $None$ and then use an if condition after the for loop (line 103) to check if $None$, in which case I set up a dictionary with x and y both equal to 1000.  I used large values to signal that this is an outlier.  This fix allowed me to run large numbers of iterations.  Prior to this, the code would not run for more than 300 iterations without halting due to this bug.
+	\end{itemize}
+
+\item
+Parameters: 
+    \begin{itemize}
+        \item Gravity: \\
+            \tab Since gravity varies run to run, we developed a method for inferring it.  We do not allow the monkey to jump in the transition from the first state to the second state.  Now we have a y\_vel for two states.  We simply take the difference as our measure of gravity, which becomes a parameter in state space.  We vetted this approach by printing y\_vel across time points to ensure the difference between them was constant for a given epoch, which proved to be true.  
+            . 
+        \item Monkey position:\\
+            \tab We decided that including both the top and bottom monkey position was redundant, since the distance between them, the monkey's height, is constant.  Therefore, we included only the bottom position in our list of parameters which span state space.  Note that this was an arbitrary decision, and selecting the top position would not alter the perfromance of our RL model. 
+            
+        \item General: \\
+            \tab We had 6 parameters in total.  These were y\_vel, monkey\_top, tree\_top, tree\_bottom, tree\_dist, gravity.  This may not seem like a lot but note that you binarize these then you have 64 states.  And with 2-possible actions (up or down) you need to track rewards for 128 states.  Now, most of the measures we are given are in pixels.  For example, monkey bottom can be any value from 0 to 343.  If each of our parameters had just 100 discrete values then we would have a state space of 1 trillion.  Therefore, we decided to take a binning approach to discretize state space.  We ran the program as packaged with random moves for 10,000 epochs to mesaure the range of each parameter.  With a max and min for each parameter (as seen below) we were able to bin parameters to any number of bins with numpy's linspace method accompanied by nested if-then logic for variable assignment.  The idea being you are given a real-value for a parameter and then we decide, which bin it belongs in.  Each bin is assigned a unique integer.
+   \end{itemize}
+
+\item
+Functions and Data Structures:
+
+We created several functions and data structures to help us with our Q-learning approach:
+
+\begin{itemize}
+	\item Q: \\
+		\tab Q is a python dictionary, which houses the history of states explored stored as keys with a 2-element list corresponding to Q[s,a].  The first element is for jump the second is for no jump.  Remember that in Q-learning, you simply select the max of these two to decide which action to take.
+	
+	\item bin\_states: \\
+	\tab bin\_states does exactly what we just mentioned with giving each parameter value a unique integer according to which bin it falls into.
+
+	\item convert\_to\_string: \\
+	\tab convert\_to\_string takes a state dictionary and formats it into a compressed string.  We need this to assign keys in the Q dictionary!
+
+	\item infer\_gravity: \\
+		\tab infer\_gravity is run on the second iteration of an epoch and looks at y\_vel at the last two states to set the gravity.  Initially, gravity is set to 4 and updated as soon as infer\_gravity is run.
+\end{itemize}
+
+\item
+Method:
+
+	\tab To solve the challenge created from the large state space, effectively continuous and therefore infinitely large, we discretized the position space into bins. One side note here is that the possible solution for such problem can also be well handled by neural network as the function approximator.  For practical reasons, given that we only have two members in our team and both of us work full-time, we worried that we might not have enough time to play around with the neural network approach and therefore we chose to use Q-learning technique to implement our code for this practical. 
+	
+	Q-learning:
+	$$
+	Q_{t+1}(s_t,a_t) = Q_{t}(s_t,a_t) + \alpha_{t}(s_t,a_t) (R_{t+1} + \gamma \max_{a}(Q_t(s_{t+1},a)) - Q_{t}(s_t,a_t))
+	$$
+	Here are some of the reasons why we decided to use this method:
+\begin{itemize}
+	\item 
+		 It amounts to an incremental method for dynamic programming which imposes limited computational demands. It provides agents with the capability of learning to act optimally in Markovian domains by experiencing the consequences of actions, without requiring them to build maps of the domains. Since we want to dynamically relocate our monkey, with the knowledge of the available height for passing through the trees, we know Q-learning is most likely to be a good choice.\\
+	
+	\item  
+		 It is a model-free reinforcement learning technique; therefore it allows us to compare the expected utility of the available actions without requiring a model of the environment. And we know this is good because often a lot of times, complicated models produces more unstable results due to model assumptions and the conflicts within the data and simplicity generally provides more robustness performance.\\
+	
+	\item  
+		 It can also handle problems with stochastic transitions and rewards without requiring any adaptations, which is suitable for our problem since one of our parameters, gravity, varies from game to game and hence generates some randomness for estimation.\\
+	
+	\item 
+		For any finite given Markov Decision Process, Q-learning eventually finds an optimal policy in the sense that the expected value of the total reward return over all successive steps, starting from the current state, is the maximum achievable. \\
+\end{itemize}
+
+\item
+Testing:
+
+\begin{itemize}
+	\item Number of Bins \\
+		\tab We tested the number of bins for a given run (1k iterations, alpha = .95, gamma = .7). Remember that number of bins determines how discretize state space.  So, fewer bins means fewer possible states.  A priori, we knew there would be a trade-off with number of bins and number of epochs.  But for 1,000 iterations, which we were limited to for testing given time constraints (it takes about 2 minutes to run 1,000 iterations on my machine), it was unclear what the optimal number of bins would be.  Our guess would have been much smaller than the result.  It appears, that around 70 bins is optimal.  One reason could be that a huge portion of this state space is not explored, since they represent unreasonable parameters. This is certainly true!
+			\begin{center} \includegraphics[scale=0.6]{Bins.PNG} \end{center}
+	
+	\item Alpha \\
+		\tab We tested the alpha for a given run (1k iterations, bins = 5, gamma = .7).  Alpha is a measure of learning rate.  The closer it is to 1 the more heavily recently acquired information is weighted. 
+			\begin{center} \includegraphics[scale=0.6]{Alpha.PNG} \end{center}
+	
+	\item Gamma \\
+		\tab We tested the gamma for a given run (1k iterations, bins = 5, alpha = .95).  Gamma is a discount factor.  So, a small alpha, close to 0, would be analogous to bias towards short-term memory and large alpha, close to 1, would be analogous to bias towards long-term memory.
+		\begin{center} \includegraphics[scale=0.6]{Gamma.PNG} \end{center}
+\end{itemize}
+
+\item
+Discussion:
+
+\tab We recognize that Q-learning is not the most sophisticated of RL techniques, but it might be an appropriate choice for cases where state can be effectively crawled.  With only 6 parameters and the option to discretize state space, we felt this was a good case for Q-learning to be applied.  Our expectations were initially very high w.r.t. potential results.  The game seemed easy enough, and we assumed that our model would quickly learn proper actions.  But we failed to consider in our intuition how much state space "blows up" as the number of bins expands.  And it is clear that a huge number of epochs is likely required to build a high-performing Q-matrix.
+
+\tab Our tests did indicate that there are gains to be had from tuning the model.  We saw that an alpha of .6 and gamma of .8 with 75 bins might be good choices for 1000 iterations of training.  To confirm, we ran the model once more using these parameters.  Remember that in testing, we found the optimal parameters by considering one parameter at a time and holding the others constant.  There was no guarantee that this method would give us the optimal set, since they depend on one another.  But nevertheless, our test run did yield the highest average score of any previous run (1.41)!  So, we were confident that this method did allow us to effectively tune the model.
+
+\tab The remaining question is how good can our model get given ample training time?  We attempted to test this by running 100k epochs for training and looking at the trend over time.  An asymptotic curve would indicate we are approaching a limit. We measured this by computing the mean at 10k-epoch intervals:
+
+\begin{center}\includegraphics[scale=0.6]{Epochs.PNG}\end{center}
+
+\tab This is indeed what we see!  .26 looks to be the limit.  There is of course a good possibility that this score would continue to rise over time.  But the returns may be marginal.  So, why is this the case?  Remember, that we are confident there is a tradeoff between the number of bins and the number of epochs, such that for a higher number of epochs, a larger number of bins would be required to improve score.  To test this, we compared 75 bins to 150 bins for 10,000 iterations.  Against our expectations, this test produced comparable results with an approximate score of .19 for both cases.  An alternative hypothesis is that the randomness in the environment has a much larger impact on the asymptote on performance describe.  The monkey's jump is variable, which means that our model can only hope to hit the mean of the optimal jump.  If variance here is sufficiently high then no agent will be able to learn the game perfectly.
+
+\newpage
+\item
+Appendix
+\item[(1)]Link to our github:\\
+\url{https://github.com/dagley11/Practicals/tree/master/Practical_4/}
+\item[(2)]Software and tools team members used:\\
+Python, OpenOffice Calc (spreadsheet tool)
+
+\end{enumerate}
+\end{document}
+
+
+
+
+
